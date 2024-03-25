@@ -2,10 +2,14 @@
 # Connects to the server at port 7777
 # Sends a message to the server, receives a reply and closes the connection
 # Use Python 3 to run
+# https://pycryptodome.readthedocs.io/en/latest/src/examples.html
 
+from Crypto.Cipher import AES
+from Crypto.Hash import HMAC, SHA256
+from Crypto.Random import get_random_bytes
 import socket
 from signal import signal, SIGPIPE, SIG_DFL
-signal(SIGPIPE,SIG_DFL)
+signal(SIGPIPE, SIG_DFL)
 
 # create a socket object
 connectionSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -30,14 +34,22 @@ while continueFlag:
         # Encode the message into bytes
         messageBytes = userInput.encode()
 
+        aes_key = get_random_bytes(16)
+        # hmac_key = get_random_bytes(16)
+        cipher = AES.new(aes_key, AES.MODE_CBC)
+        cipherBytes = cipher.encrypt(messageBytes)
+        # hmac = HMAC.new(hmac_key, digestmod=SHA256)
+        # tag = hmac.update(cipher.nonce + ciphertext).digest()
+
         # Send the bytes through the connection socket
-        connectionSocket.send(messageBytes)
+        connectionSocket.send(cipherBytes)
 
         # Receive the message from the server (receive no more than 1024 bytes)
         receivedBytes = connectionSocket.recv(1024)
+        decryptedBytes = cipher.decrypt(receivedBytes)
 
         # Decode the bytes into a string (Do this only for strings, not keys)
-        receivedMessage = bytes.decode(receivedBytes)
+        receivedMessage = bytes.decode(decryptedBytes)
         # Print the message
         print("From server: ", receivedMessage)
     else:
