@@ -3,57 +3,126 @@
 # Sends a message to the server, receives a reply and closes the connection
 # Use Python 3 to run
 # https://pycryptodome.readthedocs.io/en/latest/src/examples.html
+import math
 
 from Crypto.Cipher import AES
 from Crypto.Hash import HMAC, SHA256
 from Crypto.Random import get_random_bytes
+from Crypto.Util.Padding import pad, unpad
 import socket
-from signal import signal, SIGPIPE, SIG_DFL
-signal(SIGPIPE, SIG_DFL)
+from signal import signal, SIG_DFL, SIGFPE #SIGPIPE
+import sys
+import time
 
+signal(SIGFPE, SIG_DFL)
 # create a socket object
-connectionSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
+connection_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 # get local machine name
 host = socket.gethostname()
 # This port is where the server is listening
 port = 7777
-
 # connect to hostname on the port. Note that (host,port) is a tuple.
-connectionSocket.connect((host, port))
-# This message will be sent to the server
-# message = "Hello! I'm Daniel."
+connection_socket.connect((host, port))
 
-continueFlag = True
-while continueFlag:
+
+def check_inputs(keysize, mode):
+    keysize_flag = True
+    mode_flag = True
+    mode = mode.lower()
+    if keysize != "128" and keysize != "192" and keysize != "256":
+        print("Invalid key size")
+        keysize_flag = False
+    if mode != "ecb" and mode != "cbc":
+        print("Invalid mode")
+        mode_flag = False
+    if keysize_flag and mode_flag:
+        keysize_bytes = int(int(keysize) / 8)
+        aes_key = get_random_bytes(keysize_bytes)
+        return True, aes_key, mode
+    else:
+        connection_socket.close()
+        return False, None, None
+
+
+continue_flag = True
+aes_key = b''
+iv = b''
+mode = ""
+if len(sys.argv) < 3:
+    print("Too few arguments")
+    continue_flag = False
+    connection_socket.close()
+elif len(sys.argv) > 3:
+    print("Too many arguments")
+    continue_flag = False
+    connection_socket.close()
+else:
+    continue_flag, aes_key, mode = check_inputs(sys.argv[1], sys.argv[2])
+    if continue_flag:
+        print("key generated: ", aes_key)
+        connection_socket.send(aes_key)
+        time.sleep(1)
+        mode_bytes = mode.encode()
+        connection_socket.send(mode_bytes)
+    else:
+        connection_socket.close()
+
+
+while continue_flag:
     # Takes input from user to send to server
     userInput = input("Please enter a message to send to the server: "
                       "(enter 'bye' to exit)")
     # check whether input is exit message
     if userInput != "bye":
         # Encode the message into bytes
-        messageBytes = userInput.encode()
-
-        aes_key = get_random_bytes(16)
-        # hmac_key = get_random_bytes(16)
-        cipher = AES.new(aes_key, AES.MODE_CBC)
-        cipherBytes = cipher.encrypt(messageBytes)
-        # hmac = HMAC.new(hmac_key, digestmod=SHA256)
-        # tag = hmac.update(cipher.nonce + ciphertext).digest()
-
-        # Send the bytes through the connection socket
-        connectionSocket.send(cipherBytes)
-
-        # Receive the message from the server (receive no more than 1024 bytes)
-        receivedBytes = connectionSocket.recv(1024)
-        decryptedBytes = cipher.decrypt(receivedBytes)
-
-        # Decode the bytes into a string (Do this only for strings, not keys)
-        receivedMessage = bytes.decode(decryptedBytes)
-        # Print the message
-        print("From server: ", receivedMessage)
+        messageBytes = userInput.encode(encoding="utf-8")
+        if mode == "ecb":
+            if len(messageBytes) < 1020:
+                cipher = AES.new(aes_key, AES.MODE_ECB)
+                ct_bytes = cipher.encrypt(pad(messageBytes, AES.block_size))
+                ct_string = ct_bytes.decode(encoding="utf-8", errors="ignore")
+                print("key: ", aes_key, "\nencrypted text: ", ct_string, "\n")
+                # Send the bytes through the connection socket
+                connection_socket.send(ct_bytes)
+            else:
+                frags= math.ceil(len(messageBytes) // 1020)
+                for x in range((frags-1), 0, -1):
+                    newString=str(x)+" "
+                    for i in messageBytes:
+                        newString+=i
+                        if len(newString) == 1020 or i==(len(messageBytes)-1):
+                            cipher = AES.new(aes_key, AES.MODE_ECB)
+                            ct_bytes = cipher.encrypt(pad(newString, AES.block_size))
+                            ct_string = ct_bytes.decode(encoding="utf-8", errors="ignore")
+                            print("key: ", aes_key, "\nencrypted text: ", ct_string, "\n")
+                            # Send the bytes through the connection socket
+                            connection_socket.send(ct_bytes)
+                            newString=""
+        elif mode == "cbc":
+            iv = get_random_bytes(AES.block_size)
+            connection_socket.send(iv)
+            cipher = AES.new(aes_key, AES.MODE_CBC, iv)
+            ct_bytes = cipher.encrypt(pad(messageBytes, AES.block_size))
+            ct_string = ct_bytes.decode(encoding="utf-8", errors="ignore")
+            print("key: ", aes_key, "\niv: ", iv, "\nencrypted text: ", ct_string, "\n")
+            # Send the bytes through the connection socket
+            connection_socket.send(ct_bytes)
+        else:
+            print("Error: encrypt modes")
+            connection_socket.close()
+        # Receive the message from the client (receive no more than 1024 bytes)
+        msg_received = connection_socket.recv(1024)
+        if mode == "ecb":
+            cipher = AES.new(aes_key, AES.MODE_ECB)
+            pt_bytes = unpad(cipher.decrypt(msg_received), AES.block_size)
+            received_plaintext = pt_bytes.decode()
+            print("decrypted message: ", received_plaintext)
+        elif mode == "cbc":
+            cipher = AES.new(aes_key, AES.MODE_CBC, iv)
+            pt_bytes = unpad(cipher.decrypt(msg_received), AES.block_size)
+            received_plaintext = pt_bytes.decode()
+            print("decrypted message: ", received_plaintext)
     else:
-        connectionSocket.close()
-        continueFlag = False
-
-
+        connection_socket.close()
+        print("\nThank you for using Team Kida's AES encryption program. Goodbye!\n")
+        continue_flag = False
