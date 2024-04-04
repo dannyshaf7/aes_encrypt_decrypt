@@ -10,7 +10,7 @@ from Crypto.Hash import HMAC, SHA256
 from Crypto.Random import get_random_bytes
 from Crypto.Util.Padding import pad, unpad
 import socket
-from signal import signal, SIG_DFL, SIGFPE #SIGPIPE
+from signal import signal, SIG_DFL, SIGFPE #\SIGPIPE
 import sys
 import time
 
@@ -85,19 +85,23 @@ while continue_flag:
                 # Send the bytes through the connection socket
                 connection_socket.send(ct_bytes)
             else:
-                frags= math.ceil(len(messageBytes) // 1020)
-                for x in range((frags-1), 0, -1):
-                    newString=str(x)+" "
-                    for i in messageBytes:
-                        newString+=i
-                        if len(newString) == 1020 or i==(len(messageBytes)-1):
-                            cipher = AES.new(aes_key, AES.MODE_ECB)
-                            ct_bytes = cipher.encrypt(pad(newString, AES.block_size))
+                frags= math.ceil(len(messageBytes) / 1020)
+                newByte = bytearray(b'')
+                cipher = AES.new(aes_key, AES.MODE_ECB)
+                # send number of fragments 
+                ct_bytes = cipher.encrypt(pad(str(frags), AES.block_size))
+                ct_string = ct_bytes.decode(encoding="utf-8", errors="ignore")
+                connection_socket.send(ct_string)
+                for i in messageBytes:
+                    for x in range((frags-1), 0, -1):
+                        newByte.append(i.to_bytes(1, sys.byteorder))
+                        if len(newByte) == 1020 or i==(len(messageBytes)-1):
+                            ct_bytes = cipher.encrypt(pad(newByte, AES.block_size))
                             ct_string = ct_bytes.decode(encoding="utf-8", errors="ignore")
                             print("key: ", aes_key, "\nencrypted text: ", ct_string, "\n")
                             # Send the bytes through the connection socket
                             connection_socket.send(ct_bytes)
-                            newString=""
+                            newString=b''
         elif mode == "cbc":
             iv = get_random_bytes(AES.block_size)
             connection_socket.send(iv)
