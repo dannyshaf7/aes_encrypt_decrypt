@@ -5,7 +5,8 @@
 # https://pycryptodome.readthedocs.io/en/latest/src/examples.html
 import math
 
-from Crypto.Cipher import AES
+from Crypto.Cipher import AES, PKCS1_OAEP
+from Crypto.PublicKey import RSA
 from Crypto.Hash import HMAC, SHA256
 from Crypto.Random import get_random_bytes
 from Crypto.Util.Padding import pad, unpad
@@ -59,8 +60,22 @@ elif len(sys.argv) > 3:
 else:
     continue_flag, aes_key, mode = check_inputs(sys.argv[1], sys.argv[2])
     if continue_flag:
-        print("key generated: ", aes_key)
-        connection_socket.send(aes_key)
+        time.sleep(20) #To receive RSA public key, sleep for 5 second
+        print("Received RSA key")
+        key_received = connection_socket.recv(1024) #Server sent key to Client 
+        #print the key 
+        print("The RSA key received from the server is", key_received)
+        #encrypt the AES key with the server's public key 
+         
+        public_key=RSA.importKey(key_received)
+        #print("The public key generated is", public_key)
+        RSA_encrypt=PKCS1_OAEP.new(public_key)
+        encrypted_key=RSA_encrypt.encrypt(aes_key)
+
+        print("The encrypted key generated: ", encrypted_key)
+
+        #Send the encrypted AES key to the server
+        connection_socket.send(encrypted_key)
         time.sleep(1)
         mode_bytes = mode.encode()
         connection_socket.send(mode_bytes)
