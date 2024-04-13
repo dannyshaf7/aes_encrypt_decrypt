@@ -1,6 +1,8 @@
-# Client program
+# Client program for RSA key transport and AES encryption and decryption for messsaging
+# Authors: Kiara Clemons and Daniel Shafar 
 # Connects to the server at port 7777
-# Sends a message to the server, receives a reply and closes the connection
+# This program connects to a server to receive an RSA public key to encrypt the AES key and send to the server.
+# After the server has received the AES encrypted key, the encrypted communication between the client and server will continue until the user enters 'bye'
 # Use Python 3 to run
 # https://pycryptodome.readthedocs.io/en/latest/src/examples.html
 import math
@@ -26,10 +28,10 @@ port = 7777
 connection_socket.connect((host, port))
 
 
-def check_inputs(keysize, mode):
+def check_inputs(keysize, mode): #Validates the arguments given when starting the program
     keysize_flag = True
     mode_flag = True
-    mode = mode.lower()
+    mode = mode.lower() 
     if keysize != "128" and keysize != "192" and keysize != "256":
         print("Invalid key size")
         keysize_flag = False
@@ -37,10 +39,10 @@ def check_inputs(keysize, mode):
         print("Invalid mode")
         mode_flag = False
     if keysize_flag and mode_flag:
-        keysize_bytes = int(int(keysize) / 8)
-        aes_key = get_random_bytes(keysize_bytes)
+        keysize_bytes = int(int(keysize) / 8) #To calculate the bytes, we divide the key size by 8 
+        aes_key = get_random_bytes(keysize_bytes) #Generates the aes key by getting random bytes 
         return True, aes_key, mode
-    else:
+    else: #If any of the arguments do not pass this validation, the program will close 
         connection_socket.close()
         return False, None, None
 
@@ -49,7 +51,7 @@ continue_flag = True
 aes_key = b''
 iv = b''
 mode = ""
-if len(sys.argv) < 3:
+if len(sys.argv) < 3: #Checks to make sure there are enough arguments before running the program 
     print("Too few arguments")
     continue_flag = False
     connection_socket.close()
@@ -60,7 +62,7 @@ elif len(sys.argv) > 3:
 else:
     continue_flag, aes_key, mode = check_inputs(sys.argv[1], sys.argv[2])
     if continue_flag:
-        time.sleep(20) #To receive RSA public key, sleep for 5 second
+        time.sleep(20) #To receive RSA public key, sleep for 20 seconds
         print("Received RSA key")
         key_received = connection_socket.recv(1024) #Server sent key to Client 
         #print the key 
@@ -69,16 +71,17 @@ else:
          
         public_key=RSA.importKey(key_received)
         #print("The public key generated is", public_key)
-        RSA_encrypt=PKCS1_OAEP.new(public_key)
+        RSA_encrypt=PKCS1_OAEP.new(public_key) #Need to use PKCS1_OAEP which uses RSA keys to encrypt and decrypt messages 
         encrypted_key=RSA_encrypt.encrypt(aes_key)
 
-        print("The encrypted key generated: ", encrypted_key)
+        #print("The encrypted key generated: ", encrypted_key)
 
         #Send the encrypted AES key to the server
         connection_socket.send(encrypted_key)
-        time.sleep(1)
-        mode_bytes = mode.encode()
-        connection_socket.send(mode_bytes)
+        print("Sending Encrypted AES key")
+        time.sleep(1) #Sleep to give the server enough time to receive the message 
+        mode_bytes = mode.encode() 
+        connection_socket.send(mode_bytes) #Send the mode to the server 
     else:
         connection_socket.close()
 
